@@ -175,13 +175,13 @@ input:focus{border-color:#6366f1}
 
 <div class="card">
   <div class="card-title">🚦 SOP 進場燈號</div>
-  <button class="consolidate-btn" onclick="sendConsolidating()">⏳ 15分區間整理中 → 推送到 TG</button>
   <div class="sop-steps">
     <div class="sop-step" id="step0"><div class="sop-dot"></div><span class="sop-label">等待突破關鍵位</span><button class="sop-btn" onclick="advanceSOP(1)">已突破 ✓</button></div>
     <div class="sop-step" id="step1"><div class="sop-dot"></div><span class="sop-label">第一根 K 棒突破</span><button class="sop-btn" onclick="advanceSOP(2)">已回測 ✓</button></div>
     <div class="sop-step" id="step2"><div class="sop-dot"></div><span class="sop-label">第二根回測確認</span><button class="sop-btn" onclick="advanceSOP(3)">已進場 ✓</button></div>
     <div class="sop-step" id="step3"><div class="sop-dot"></div><span class="sop-label">第三根進場執行</span></div>
   </div>
+  <button class="consolidate-btn" onclick="sendConsolidating()">⏳ 15分區間整理中 → 推送到 TG</button>
 </div>
 
 <div class="card">
