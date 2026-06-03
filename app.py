@@ -158,6 +158,24 @@ def msg_wait_breakout(t):
             f"🔍 回到觀察模式\n"
             f"📌 等待新區間突破再規劃")
 
+def msg_watch_m5(t):
+    if t:
+        direction = "向上" if t["direction"] == "long" else "向下"
+        return (f"👁 <b>XAU/USD 注意5分回測！</b>\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"動能過強，M15 直接噴出\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"📌 切換 M5 觀察\n"
+                f"等 M5 第一根突破 {direction}\n"
+                f"第二根回測確認，第三根進場\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"⚠️ 勿追市，等 M5 結構確認")
+    return (f"👁 <b>XAU/USD 注意5分回測！</b>\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"動能過強，M15 直接噴出\n"
+            f"📌 切換 M5 等回測結構確認\n"
+            f"⚠️ 勿追市，等 M5 第三根進場")
+
 def msg_result(data):
     result = data.get("result", "win").lower()
     entry  = float(data.get("entry", 0))
@@ -233,6 +251,8 @@ h1{font-size:18px;font-weight:700;color:#f0c040;margin-bottom:4px;letter-spacing
 .sop-btn.gray{background:#1a1f2e;border-color:#374151;color:#9ca3af}
 .sop-extra{display:flex;gap:6px;margin-bottom:16px}
 .sop-extra button{flex:1;padding:8px;font-size:12px;border-radius:8px;cursor:pointer;transition:all .15s}
+.btn-watch-m5{width:100%;padding:9px;font-size:12px;font-weight:600;border-radius:8px;cursor:pointer;transition:all .15s;margin-top:6px;background:#1a1535;border:1px solid #7c3aed66;color:#a78bfa}
+.btn-watch-m5:active{transform:scale(.97)}
 .btn-retest-fail{background:#2a0a0a;border:1px solid #ef444466;color:#ef4444}
 .btn-wait-breakout{background:#1a1f2e;border:1px solid #37415166;color:#9ca3af}
 
@@ -328,6 +348,7 @@ h1{font-size:18px;font-weight:700;color:#f0c040;margin-bottom:4px;letter-spacing
     <button class="btn-retest-fail" onclick="triggerSOP('retest_fail', -1)">❌ 回測失敗</button>
     <button class="btn-wait-breakout" onclick="triggerSOP('wait_breakout', -2)">🔁 重新等待突破</button>
   </div>
+  <button class="btn-watch-m5" onclick="triggerSOP('watch_m5', -3)">👁 注意5分回測！動能過強切M5等結構</button>
 
   <!-- 當前單子 -->
   <p class="section-title">📋 當前單子</p>
@@ -536,6 +557,7 @@ def sop():
     elif type_ == "entry_confirmed": msg = msg_entry_confirmed(t)
     elif type_ == "retest_fail":   msg = msg_retest_fail(t)
     elif type_ == "wait_breakout": msg = msg_wait_breakout(t)
+    elif type_ == "watch_m5":    msg = msg_watch_m5(t)
     else: return jsonify({"ok": False}), 400
     send_telegram(msg)
     return jsonify({"ok": True})
