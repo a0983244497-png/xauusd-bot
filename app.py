@@ -102,6 +102,7 @@ input:focus{border-color:#6366f1}
 .auto-tag{font-size:10px;color:#34d399;font-family:'IBM Plex Mono',monospace;margin-top:4px}
 .submit-btn{width:100%;padding:13px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;margin-top:4px;transition:opacity 0.2s}
 .submit-btn:hover{opacity:0.85}
+.autofill-banner{background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#34d399;font-family:'IBM Plex Mono',monospace;display:none}
 .quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .quick-btn{padding:10px 8px;border-radius:8px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:opacity 0.2s;font-family:'Noto Sans TC',sans-serif}
 .quick-btn:hover{opacity:0.8}
@@ -119,6 +120,7 @@ input:focus{border-color:#6366f1}
 <div class="container">
 <h1>XAU/USD 交易管理</h1>
 <p class="subtitle">輸入單子參數 → 自動推送 Telegram</p>
+<div class="autofill-banner" id="autofillBanner">⚡ 助教已自動帶入參數，確認後按送出即可！</div>
 <div class="card">
   <div class="card-title">📋 當前單子</div>
   <div id="statusContent"><div class="status-empty">尚未設定單子</div></div>
@@ -136,7 +138,7 @@ input:focus{border-color:#6366f1}
     <div class="input-group"><label>TP1（自動）</label><input type="number" id="tp1" placeholder="自動帶入" step="0.01"></div>
     <div class="input-group"><label>TP2（自動）</label><input type="number" id="tp2" placeholder="自動帶入" step="0.01"></div>
   </div>
-  <button class="submit-btn" onclick="submitTrade()">📤 儲存並推送進場提醒到 TG</button>
+  <button class="submit-btn" onclick="submitTrade()">📤 確認並推送進場提醒到 TG</button>
 </div>
 <div class="card">
   <div class="card-title">⚡ 快速推送提醒</div>
@@ -152,14 +154,32 @@ input:focus{border-color:#6366f1}
 <div class="toast" id="toast"></div>
 <script>
 let direction='long';
+
+// 讀取網址參數自動帶入
+window.onload=function(){
+  const params=new URLSearchParams(window.location.search);
+  if(params.get('entry')){
+    const d=params.get('direction')||'long';
+    setDirection(d);
+    document.getElementById('entry').value=params.get('entry')||'';
+    document.getElementById('sl').value=params.get('sl')||'';
+    document.getElementById('range').value=params.get('range')||'';
+    document.getElementById('tp1').value=params.get('tp1')||'';
+    document.getElementById('tp2').value=params.get('tp2')||'';
+    if(params.get('range'))document.getElementById('autoTag').textContent='✓ TP1 '+params.get('tp1')+'  TP2 '+params.get('tp2');
+    document.getElementById('autofillBanner').style.display='block';
+    window.history.replaceState({},'','/');
+  }
+  loadStatus();
+}
+
 function setDirection(d){direction=d;document.getElementById('btnLong').className='dir-btn'+(d==='long'?' active-long':'');document.getElementById('btnShort').className='dir-btn'+(d==='short'?' active-short':'');calcTP()}
 function calcTP(){const entry=parseFloat(document.getElementById('entry').value);const range=parseFloat(document.getElementById('range').value);if(!entry||!range)return;const tp1=direction==='long'?(entry+range).toFixed(2):(entry-range).toFixed(2);const tp2=direction==='long'?(entry+range*2).toFixed(2):(entry-range*2).toFixed(2);document.getElementById('tp1').value=tp1;document.getElementById('tp2').value=tp2;document.getElementById('autoTag').textContent='✓ TP1 '+tp1+'  TP2 '+tp2}
-async function submitTrade(){const entry=document.getElementById('entry').value;const sl=document.getElementById('sl').value;const tp1=document.getElementById('tp1').value;const tp2=document.getElementById('tp2').value;const range=document.getElementById('range').value;if(!entry||!sl||!tp1||!tp2){showToast('請填入所有欄位',true);return}const res=await fetch('/set_trade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({direction,entry,sl,tp1,tp2,range})});const data=await res.json();if(data.ok){showToast('✅ 已儲存並推送進場提醒！');loadStatus()}else showToast('❌ 發送失敗',true)}
+async function submitTrade(){const entry=document.getElementById('entry').value;const sl=document.getElementById('sl').value;const tp1=document.getElementById('tp1').value;const tp2=document.getElementById('tp2').value;const range=document.getElementById('range').value;if(!entry||!sl||!tp1||!tp2){showToast('請填入所有欄位',true);return}const res=await fetch('/set_trade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({direction,entry,sl,tp1,tp2,range})});const data=await res.json();if(data.ok){showToast('✅ 已儲存並推送進場提醒！');document.getElementById('autofillBanner').style.display='none';loadStatus()}else showToast('❌ 發送失敗',true)}
 async function sendAlert(type){const res=await fetch('/webhook',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,price:'—'})});const data=await res.json();if(data.ok){showToast('✅ 提醒已推送到 TG！');if(type==='close')loadStatus()}else showToast(data.error||'❌ 先設定單子再推送',true)}
 async function clearTrade(){await fetch('/clear_trade',{method:'POST'});showToast('🗑 單子已清除');loadStatus()}
 async function loadStatus(){const res=await fetch('/trade');const t=await res.json();const el=document.getElementById('statusContent');if(!t.entry){el.innerHTML='<div class="status-empty">尚未設定單子</div>';return}const dirColor=t.direction==='long'?'green':'red';const dirText=t.direction==='long'?'▲ 多單 LONG':'▼ 空單 SHORT';el.innerHTML='<div class="trade-row"><span class="trade-label">方向</span><span class="trade-val '+dirColor+'">'+dirText+'</span></div><div class="trade-row"><span class="trade-label">進場價</span><span class="trade-val">'+t.entry+'</span></div><div class="trade-row"><span class="trade-label">停損</span><span class="trade-val red">'+t.sl+'</span></div><div class="trade-row"><span class="trade-label">TP1</span><span class="trade-val green">'+t.tp1+'</span></div><div class="trade-row"><span class="trade-label">TP2</span><span class="trade-val purple">'+t.tp2+'</span></div>'}
 function showToast(msg,isError=false){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(isError?' error':'');setTimeout(()=>{t.className='toast'},3000)}
-loadStatus();
 </script>
 </body>
 </html>"""
