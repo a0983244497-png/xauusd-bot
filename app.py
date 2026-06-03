@@ -10,6 +10,8 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
 current_trade = {}
+sop_status = {"step": 0}
+# step 0 = 等待突破, 1 = 已突破, 2 = 已回測, 3 = 已進場
 
 def send_telegram(message):
     if not BOT_TOKEN or not CHAT_ID:
@@ -72,6 +74,21 @@ def msg_close(t):
             f"📌 等新區間形成再規劃下一波\n"
             f"🔄 停手觀察，勿追行情")
 
+def msg_breakout(t):
+    direction = "向下突破" if t["direction"] == "short" else "向上突破"
+    return (f"⚡ <b>XAU/USD 突破訊號！</b>\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"{direction} {t['entry']}\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"📌 等待回測確認，準備進場")
+
+def msg_retest(t):
+    return (f"🔄 <b>XAU/USD 回測確認！</b>\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"回測 {t['entry']} 守住\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"⚡ 等待第三根K棒確認進場")
+
 HTML = """<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -116,6 +133,16 @@ input:focus{border-color:#6366f1}
 .clear-btn:hover{border-color:#f87171;color:#f87171}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e2637;border:1px solid #34d399;color:#34d399;padding:10px 24px;border-radius:8px;font-size:13px;font-family:'IBM Plex Mono',monospace;opacity:0;transition:opacity 0.3s;pointer-events:none;z-index:999;white-space:nowrap}
 .toast.show{opacity:1}.toast.error{border-color:#f87171;color:#f87171}
+.sop-steps{display:flex;flex-direction:column;gap:8px}
+.sop-step{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:8px;background:#1e2637;border:1px solid #2a3550}
+.sop-step.active{background:rgba(251,191,36,0.1);border-color:rgba(251,191,36,0.3)}
+.sop-step.done{background:rgba(52,211,153,0.1);border-color:rgba(52,211,153,0.3)}
+.sop-dot{width:10px;height:10px;border-radius:50%;background:#2a3550;flex-shrink:0}
+.sop-step.active .sop-dot{background:#fbbf24;box-shadow:0 0 6px #fbbf24}
+.sop-step.done .sop-dot{background:#34d399}
+.sop-label{font-size:13px;color:#6b7a99}
+.sop-step.active .sop-label{color:#fbbf24;font-weight:600}
+.sop-step.done .sop-label{color:#34d399}
 </style>
 </head>
 <body>
@@ -123,10 +150,22 @@ input:focus{border-color:#6366f1}
 <h1>XAU/USD 交易管理</h1>
 <p class="subtitle">輸入單子參數 → 自動推送 Telegram</p>
 <div class="autofill-banner" id="autofillBanner">⚡ 助教已自動帶入參數，確認後按送出即可！</div>
+
+<div class="card">
+  <div class="card-title">🚦 SOP 進場燈號</div>
+  <div class="sop-steps" id="sopSteps">
+    <div class="sop-step" id="step0"><div class="sop-dot"></div><span class="sop-label">等待突破關鍵位</span></div>
+    <div class="sop-step" id="step1"><div class="sop-dot"></div><span class="sop-label">第一根 K 棒突破</span></div>
+    <div class="sop-step" id="step2"><div class="sop-dot"></div><span class="sop-label">第二根回測確認</span></div>
+    <div class="sop-step" id="step3"><div class="sop-dot"></div><span class="sop-label">第三根進場執行</span></div>
+  </div>
+</div>
+
 <div class="card">
   <div class="card-title">📋 當前單子</div>
   <div id="statusContent"><div class="status-empty">尚未設定單子</div></div>
 </div>
+
 <div class="card">
   <div class="card-title">➕ 設定新單子</div>
   <div class="dir-group">
@@ -142,6 +181,7 @@ input:focus{border-color:#6366f1}
   </div>
   <button class="submit-btn" onclick="submitTrade()">📤 確認並推送進場提醒到 TG</button>
 </div>
+
 <div class="card">
   <div class="card-title">⚡ 快速推送提醒</div>
   <div class="quick-grid">
@@ -157,7 +197,6 @@ input:focus{border-color:#6366f1}
 <script>
 let direction='long';
 
-// 讀取網址參數自動帶入
 window.onload=function(){
   const params=new URLSearchParams(window.location.search);
   if(params.get('entry')){
@@ -173,13 +212,32 @@ window.onload=function(){
     window.history.replaceState({},'','/');
   }
   loadStatus();
+  loadSOP();
+  setInterval(loadSOP, 3000);
+}
+
+function updateSOPUI(step){
+  for(let i=0;i<4;i++){
+    const el=document.getElementById('step'+i);
+    el.className='sop-step';
+    if(i<step) el.classList.add('done');
+    else if(i===step) el.classList.add('active');
+  }
+}
+
+async function loadSOP(){
+  try{
+    const res=await fetch('/sop');
+    const data=await res.json();
+    updateSOPUI(data.step);
+  }catch(e){}
 }
 
 function setDirection(d){direction=d;document.getElementById('btnLong').className='dir-btn'+(d==='long'?' active-long':'');document.getElementById('btnShort').className='dir-btn'+(d==='short'?' active-short':'');calcTP()}
 function calcTP(){const entry=parseFloat(document.getElementById('entry').value);const range=parseFloat(document.getElementById('range').value);if(!entry||!range)return;const tp1=direction==='long'?(entry+range).toFixed(2):(entry-range).toFixed(2);const tp2=direction==='long'?(entry+range*2).toFixed(2):(entry-range*2).toFixed(2);document.getElementById('tp1').value=tp1;document.getElementById('tp2').value=tp2;document.getElementById('autoTag').textContent='✓ TP1 '+tp1+'  TP2 '+tp2}
 async function submitTrade(){const entry=document.getElementById('entry').value;const sl=document.getElementById('sl').value;const tp1=document.getElementById('tp1').value;const tp2=document.getElementById('tp2').value;const range=document.getElementById('range').value;if(!entry||!sl||!tp1||!tp2){showToast('請填入所有欄位',true);return}const res=await fetch('/set_trade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({direction,entry,sl,tp1,tp2,range})});const data=await res.json();if(data.ok){showToast('✅ 已儲存並推送進場提醒！');document.getElementById('autofillBanner').style.display='none';loadStatus()}else showToast('❌ 發送失敗',true)}
 async function sendAlert(type){const res=await fetch('/webhook',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,price:'—'})});const data=await res.json();if(data.ok){showToast('✅ 提醒已推送到 TG！');if(type==='close')loadStatus()}else showToast(data.error||'❌ 先設定單子再推送',true)}
-async function clearTrade(){await fetch('/clear_trade',{method:'POST'});showToast('🗑 單子已清除');loadStatus()}
+async function clearTrade(){await fetch('/clear_trade',{method:'POST'});await fetch('/sop_reset',{method:'POST'});showToast('🗑 單子已清除');loadStatus();loadSOP()}
 async function loadStatus(){const res=await fetch('/trade');const t=await res.json();const el=document.getElementById('statusContent');if(!t.entry){el.innerHTML='<div class="status-empty">尚未設定單子</div>';return}const dirColor=t.direction==='long'?'green':'red';const dirText=t.direction==='long'?'▲ 多單 LONG':'▼ 空單 SHORT';el.innerHTML='<div class="trade-row"><span class="trade-label">方向</span><span class="trade-val '+dirColor+'">'+dirText+'</span></div><div class="trade-row"><span class="trade-label">進場價</span><span class="trade-val">'+t.entry+'</span></div><div class="trade-row"><span class="trade-label">停損</span><span class="trade-val red">'+t.sl+'</span></div><div class="trade-row"><span class="trade-label">TP1</span><span class="trade-val green">'+t.tp1+'</span></div><div class="trade-row"><span class="trade-label">TP2</span><span class="trade-val purple">'+t.tp2+'</span></div>'}
 function showToast(msg,isError=false){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(isError?' error':'');setTimeout(()=>{t.className='toast'},3000)}
 </script>
@@ -192,7 +250,7 @@ def index():
 
 @app.route("/set_trade", methods=["POST"])
 def set_trade():
-    global current_trade
+    global current_trade, sop_status
     data = request.json
     current_trade = {
         "direction": data.get("direction", "long"),
@@ -202,6 +260,7 @@ def set_trade():
         "tp2": data.get("tp2", ""),
         "range": data.get("range", ""),
     }
+    sop_status = {"step": 0}
     send_telegram(msg_entry(current_trade))
     return jsonify({"ok": True, "trade": current_trade})
 
@@ -209,20 +268,49 @@ def set_trade():
 def get_trade():
     return jsonify(current_trade)
 
+@app.route("/sop", methods=["GET"])
+def get_sop():
+    return jsonify(sop_status)
+
+@app.route("/sop_reset", methods=["POST"])
+def sop_reset():
+    global sop_status
+    sop_status = {"step": 0}
+    return jsonify({"ok": True})
+
 @app.route("/clear_trade", methods=["POST"])
 def clear_trade():
-    global current_trade
+    global current_trade, sop_status
     current_trade = {}
+    sop_status = {"step": 0}
     return jsonify({"ok": True})
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    global current_trade
+    global current_trade, sop_status
     data = request.json
     alert_type = data.get("type", "")
     price = data.get("price", "N/A")
+
+    if alert_type == "breakout":
+        sop_status["step"] = 1
+        if current_trade:
+            send_telegram(msg_breakout(current_trade))
+        return jsonify({"ok": True})
+
+    if alert_type == "retest":
+        sop_status["step"] = 2
+        if current_trade:
+            send_telegram(msg_retest(current_trade))
+        return jsonify({"ok": True})
+
+    if alert_type == "entry_confirmed":
+        sop_status["step"] = 3
+        return jsonify({"ok": True})
+
     if not current_trade:
         return jsonify({"ok": False, "error": "尚未設定當前單子"})
+
     if alert_type == "tp1":
         message = msg_tp1(current_trade)
     elif alert_type == "profit":
@@ -232,14 +320,16 @@ def webhook():
     elif alert_type == "close":
         message = msg_close(current_trade)
         current_trade = {}
+        sop_status = {"step": 0}
     else:
         message = f"📊 XAU/USD 警報：{data.get('message', alert_type)}"
+
     success = send_telegram(message)
     return jsonify({"ok": success})
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "running", "has_trade": bool(current_trade)})
+    return jsonify({"status": "running", "has_trade": bool(current_trade), "sop_step": sop_status.get("step", 0)})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
