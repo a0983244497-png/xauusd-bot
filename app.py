@@ -249,9 +249,9 @@ h1{font-size:18px;font-weight:700;color:#f0c040;margin-bottom:4px;letter-spacing
 .sop-btn:active{transform:scale(.97)}
 .sop-btn.red{background:#2a0a0a;border-color:#5c1a1a;color:#ef4444}
 .sop-btn.gray{background:#1a1f2e;border-color:#374151;color:#9ca3af}
-.sop-extra{display:flex;gap:6px;margin-bottom:16px}
+.sop-extra{display:flex;gap:6px;margin-bottom:6px}
 .sop-extra button{flex:1;padding:8px;font-size:12px;border-radius:8px;cursor:pointer;transition:all .15s}
-.btn-watch-m5{width:100%;padding:9px;font-size:12px;font-weight:600;border-radius:8px;cursor:pointer;transition:all .15s;margin-top:6px;background:#1a1535;border:1px solid #7c3aed66;color:#a78bfa}
+.btn-watch-m5{width:100%;padding:9px;font-size:12px;font-weight:600;border-radius:8px;cursor:pointer;transition:all .15s;margin-top:0px;margin-bottom:16px;background:#1a1535;border:1px solid #7c3aed66;color:#a78bfa}
 .btn-watch-m5:active{transform:scale(.97)}
 .btn-retest-fail{background:#2a0a0a;border:1px solid #ef444466;color:#ef4444}
 .btn-wait-breakout{background:#1a1f2e;border:1px solid #37415166;color:#9ca3af}
@@ -439,22 +439,21 @@ function calcTP(){
 }
 
 function triggerSOP(type, step){
-  // 回測失敗：清除step1,2,3
-  if(type === 'retest_fail'){
+  if(type === 'watch_m5'){
+    // 燈號不動，只推送 TG
+  } else if(type === 'retest_fail'){
     document.getElementById('step1').className='sop-step fail';
     document.getElementById('step2').className='sop-step';
     document.getElementById('step3').className='sop-step';
-  }
-  // 重新等待突破：清除全部
-  else if(type === 'wait_breakout'){
+  } else if(type === 'wait_breakout'){
     for(let i=0;i<4;i++) document.getElementById('step'+i).className='sop-step'+(i===0?' active':'');
-  }
-  // 正常SOP步驟
-  else {
+  } else {
     document.getElementById('step'+step).classList.add('done');
   }
   fetch('/sop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:type})})
-    .then(()=>showToast('✅ 已推送到 TG！'));
+    .then(r=>r.json())
+    .then(()=>showToast('✅ 已推送到 TG！'))
+    .catch(()=>showToast('❌ 推送失敗',true));
 }
 
 async function submitTrade(){
@@ -551,13 +550,13 @@ def sop():
     data = request.get_json(force=True)
     t = current_trade
     type_ = data.get("type")
-    if type_ == "consolidating":   msg = msg_consolidating(t)
-    elif type_ == "breakout":      msg = msg_breakout(t)
-    elif type_ == "retest":        msg = msg_retest(t)
+    if type_ == "consolidating":     msg = msg_consolidating(t)
+    elif type_ == "breakout":        msg = msg_breakout(t)
+    elif type_ == "retest":          msg = msg_retest(t)
     elif type_ == "entry_confirmed": msg = msg_entry_confirmed(t)
-    elif type_ == "retest_fail":   msg = msg_retest_fail(t)
-    elif type_ == "wait_breakout": msg = msg_wait_breakout(t)
-    elif type_ == "watch_m5":    msg = msg_watch_m5(t)
+    elif type_ == "retest_fail":     msg = msg_retest_fail(t)
+    elif type_ == "wait_breakout":   msg = msg_wait_breakout(t)
+    elif type_ == "watch_m5":        msg = msg_watch_m5(t)
     else: return jsonify({"ok": False}), 400
     send_telegram(msg)
     return jsonify({"ok": True})
@@ -570,25 +569,13 @@ def quick():
     t = current_trade if current_trade else {}
 
     if type_ == "tp1":
-        if t:
-            msg = msg_tp1(t)
-        else:
-            msg = "✅ <b>XAU/USD TP1 達到！</b>\n━━━━━━━━━━━━━━━\n⚡ 動作：執行讓利出場"
+        msg = msg_tp1(t) if t else "✅ <b>XAU/USD TP1 達到！</b>\n━━━━━━━━━━━━━━━\n⚡ 動作：執行讓利出場"
     elif type_ == "profit":
-        if t:
-            msg = msg_profit(t, price)
-        else:
-            msg = "💰 <b>XAU/USD 讓利提醒</b>\n━━━━━━━━━━━━━━━\n建議出場｜一半倉位先走"
+        msg = msg_profit(t, price) if t else "💰 <b>XAU/USD 讓利提醒</b>\n━━━━━━━━━━━━━━━\n建議出場｜一半倉位先走"
     elif type_ == "sl_warning":
-        if t:
-            msg = msg_sl_warning(t, price)
-        else:
-            msg = "🚨 <b>XAU/USD 停損警告！</b>\n━━━━━━━━━━━━━━━\n⚠️ 價格接近停損！請確認部位\n❌ 若觸及停損：立即出場勿凹單"
+        msg = msg_sl_warning(t, price) if t else "🚨 <b>XAU/USD 停損警告！</b>\n━━━━━━━━━━━━━━━\n⚠️ 價格接近停損！請確認部位\n❌ 若觸及停損：立即出場勿凹單"
     elif type_ == "close":
-        if t:
-            msg = msg_close(t)
-        else:
-            msg = "🏁 <b>XAU/USD 本波結束</b>\n━━━━━━━━━━━━━━━\n📌 等新區間形成再規劃下一波\n🔄 停手觀察，勿追行情"
+        msg = msg_close(t) if t else "🏁 <b>XAU/USD 本波結束</b>\n━━━━━━━━━━━━━━━\n📌 等新區間形成再規劃下一波\n🔄 停手觀察，勿追行情"
     else:
         return jsonify({"ok": False}), 400
     send_telegram(msg)
