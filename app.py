@@ -332,19 +332,34 @@ def webhook():
     if alert_type == "breakout":
         sop_status["step"] = 1
         if current_trade:
-            send_telegram(msg_breakout(current_trade))
+            message = msg_breakout(current_trade)
+        else:
+            message = ("⚡ <b>XAU/USD 突破訊號！</b>\n"
+                      f"━━━━━━━━━━━━━━━\n"
+                      f"📌 等待回測確認，準備進場")
+        send_telegram(message)
         return jsonify({"ok": True})
 
     if alert_type == "retest":
         sop_status["step"] = 2
         if current_trade:
-            send_telegram(msg_retest(current_trade))
+            message = msg_retest(current_trade)
+        else:
+            message = ("🔄 <b>XAU/USD 回測確認！</b>\n"
+                      f"━━━━━━━━━━━━━━━\n"
+                      f"⚡ 等待第三根K棒確認進場")
+        send_telegram(message)
         return jsonify({"ok": True})
 
     if alert_type == "entry_confirmed":
         sop_status["step"] = 3
         if current_trade:
-            send_telegram(msg_entry_confirmed(current_trade))
+            message = msg_entry_confirmed(current_trade)
+        else:
+            message = ("🎯 <b>XAU/USD 第三根進場！</b>\n"
+                      f"━━━━━━━━━━━━━━━\n"
+                      f"⚡ 進場執行中")
+        send_telegram(message)
         return jsonify({"ok": True})
 
     if not current_trade:
