@@ -13,7 +13,7 @@ CHAT_ID = os.environ.get("CHAT_ID")
 TZ_TAIPEI = timezone(timedelta(hours=8))
 
 current_trade = {}
-sop_status = {"step": -1}
+sop_status = {"step": -1, "triggered": []}
 daily_stats = {"wins": 0, "losses": 0, "date": ""}
 
 def get_today():
@@ -138,6 +138,26 @@ def msg_entry_confirmed(t):
             f"━━━━━━━━━━━━━━━\n"
             f"⚡ 進場執行中")
 
+def msg_retest_fail(t):
+    if t:
+        return (f"❌ <b>XAU/USD 回測失敗</b>\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"回測 {t['entry']} 未守住\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"🚫 訊號取消，等待重新整理\n"
+                f"📌 保持觀察，勿追入")
+    return (f"❌ <b>XAU/USD 回測失敗</b>\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"🚫 訊號取消，等待重新整理")
+
+def msg_wait_breakout(t):
+    return (f"🔁 <b>XAU/USD 重新等待突破</b>\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"行情假突破，訊號失效\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"🔍 回到觀察模式\n"
+            f"📌 等待新區間突破再規劃")
+
 def msg_result(data):
     result = data.get("result", "win").lower()
     entry  = float(data.get("entry", 0))
@@ -194,19 +214,27 @@ h1{font-size:18px;font-weight:700;color:#f0c040;margin-bottom:4px;letter-spacing
 .subtitle{font-size:12px;color:#6b7280;margin-bottom:20px}
 .hint-bar{background:#1a2035;border:1px solid #2a3a5c;border-radius:8px;padding:10px 14px;font-size:12px;color:#60a0ff;margin-bottom:16px;display:none}
 .hint-bar.show{display:block}
+.section-title{font-size:11px;color:#6b7280;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px}
 
 /* SOP */
-.section-title{font-size:11px;color:#6b7280;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px}
-.sop-steps{display:flex;flex-direction:column;gap:6px;margin-bottom:20px}
+.sop-steps{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
 .sop-step{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1a1f2e;border:1px solid #2a3a5c;border-radius:8px;transition:all .2s}
 .sop-step.active{border-color:#f0c040;background:#1e2235}
 .sop-step.done{border-color:#22c55e;background:#0f2318}
+.sop-step.fail{border-color:#ef4444;background:#2a0a0a}
 .sop-dot{width:8px;height:8px;border-radius:50%;background:#374151;flex-shrink:0}
 .sop-step.active .sop-dot{background:#f0c040}
 .sop-step.done .sop-dot{background:#22c55e}
+.sop-step.fail .sop-dot{background:#ef4444}
 .sop-label{flex:1;font-size:13px}
 .sop-btn{font-size:11px;padding:4px 10px;background:#1e3a5c;border:1px solid #2a5080;color:#60a0ff;border-radius:6px;cursor:pointer;white-space:nowrap}
 .sop-btn:active{transform:scale(.97)}
+.sop-btn.red{background:#2a0a0a;border-color:#5c1a1a;color:#ef4444}
+.sop-btn.gray{background:#1a1f2e;border-color:#374151;color:#9ca3af}
+.sop-extra{display:flex;gap:6px;margin-bottom:16px}
+.sop-extra button{flex:1;padding:8px;font-size:12px;border-radius:8px;cursor:pointer;transition:all .15s}
+.btn-retest-fail{background:#2a0a0a;border:1px solid #ef444466;color:#ef4444}
+.btn-wait-breakout{background:#1a1f2e;border:1px solid #37415166;color:#9ca3af}
 
 /* Trade card */
 .trade-card{background:#1a1f2e;border:1px solid #2a3a5c;border-radius:10px;padding:16px;margin-bottom:16px}
@@ -249,7 +277,7 @@ h1{font-size:18px;font-weight:700;color:#f0c040;margin-bottom:4px;letter-spacing
 .quick-btn.close{border-color:#f0c040;color:#f0c040}
 .clear-btn{width:100%;padding:8px;font-size:12px;background:transparent;border:1px solid #374151;color:#4b5563;border-radius:8px;cursor:pointer;margin-bottom:20px}
 
-/* 結果回報區塊 */
+/* 結果回報 */
 .result-section{background:#1a1f2e;border:1px solid #2a3a5c;border-radius:10px;padding:16px;margin-bottom:16px}
 .result-section summary{font-size:13px;font-weight:500;cursor:pointer;color:#9ca3af;list-style:none}
 .result-section summary::-webkit-details-marker{display:none}
@@ -258,7 +286,7 @@ h1{font-size:18px;font-weight:700;color:#f0c040;margin-bottom:4px;letter-spacing
 .result-btn{flex:1;padding:9px;font-size:13px;font-weight:600;border-radius:8px;border:1px solid #374151;background:#111827;color:#6b7280;cursor:pointer;transition:all .15s}
 .result-btn.win.active{background:#0f2318;border-color:#22c55e;color:#22c55e}
 .result-btn.loss.active{background:#2a0a0a;border-color:#ef4444;color:#ef4444}
-.result-send-btn{width:100%;padding:12px;background:#1e3a2a;border:1px solid #22c55e44;color:#22c55e;font-size:14px;font-weight:600;border-radius:8px;cursor:pointer;margin-top:4px;transition:all .15s}
+.result-send-btn{width:100%;padding:12px;background:#1e3a2a;border:1px solid #22c55e44;color:#22c55e;font-size:14px;font-weight:600;border-radius:8px;cursor:pointer;margin-top:4px}
 .result-send-btn:active{transform:scale(.98)}
 
 /* Toast */
@@ -295,6 +323,10 @@ h1{font-size:18px;font-weight:700;color:#f0c040;margin-bottom:4px;letter-spacing
       <span class="sop-label">🎯 第三根進場執行</span>
       <button class="sop-btn" onclick="triggerSOP('entry_confirmed',3)">推送 TG</button>
     </div>
+  </div>
+  <div class="sop-extra">
+    <button class="btn-retest-fail" onclick="triggerSOP('retest_fail', -1)">❌ 回測失敗</button>
+    <button class="btn-wait-breakout" onclick="triggerSOP('wait_breakout', -2)">🔁 重新等待突破</button>
   </div>
 
   <!-- 當前單子 -->
@@ -350,7 +382,6 @@ h1{font-size:18px;font-weight:700;color:#f0c040;margin-bottom:4px;letter-spacing
 let direction = 'long';
 let resultType = 'win';
 
-// URL 參數自動帶入
 const p = new URLSearchParams(location.search);
 if(p.get('direction')||p.get('entry')){
   const d = p.get('direction')||'long';
@@ -387,15 +418,27 @@ function calcTP(){
 }
 
 function triggerSOP(type, step){
-  for(let i=0;i<4;i++) document.getElementById('step'+i).className='sop-step';
-  document.getElementById('step'+step).classList.add('active','done');
+  // 回測失敗：清除step1,2,3
+  if(type === 'retest_fail'){
+    document.getElementById('step1').className='sop-step fail';
+    document.getElementById('step2').className='sop-step';
+    document.getElementById('step3').className='sop-step';
+  }
+  // 重新等待突破：清除全部
+  else if(type === 'wait_breakout'){
+    for(let i=0;i<4;i++) document.getElementById('step'+i).className='sop-step'+(i===0?' active':'');
+  }
+  // 正常SOP步驟
+  else {
+    document.getElementById('step'+step).classList.add('done');
+  }
   fetch('/sop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:type})})
-    .then(()=>showToast('✅ SOP 已推送到 TG！'));
+    .then(()=>showToast('✅ 已推送到 TG！'));
 }
 
 async function submitTrade(){
   const t = {
-    direction, 
+    direction,
     entry: document.getElementById('entry').value,
     sl:    document.getElementById('sl').value,
     range: document.getElementById('range').value,
@@ -430,11 +473,7 @@ async function submitResult(){
   const res = await fetch('/result',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
   if(res.ok){
     showToast('✅ 交易結果已推送！');
-    document.getElementById('rEntry').value='';
-    document.getElementById('rExit').value='';
-    document.getElementById('rPnl').value='';
-    document.getElementById('rLot').value='';
-    document.getElementById('rNote').value='';
+    ['rEntry','rExit','rPnl','rLot','rNote'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('resultDetails').open=false;
   }
 }
@@ -469,7 +508,6 @@ function showToast(msg){
   setTimeout(()=>t.classList.remove('show'), 2500);
 }
 
-// 頁面載入時拉取當前單子
 fetch('/current').then(r=>r.json()).then(t=>{if(t&&t.entry) updateTradeCard(t);});
 </script>
 </body>
@@ -493,10 +531,12 @@ def sop():
     data = request.get_json(force=True)
     t = current_trade
     type_ = data.get("type")
-    if type_ == "consolidating": msg = msg_consolidating(t)
-    elif type_ == "breakout":    msg = msg_breakout(t)
-    elif type_ == "retest":      msg = msg_retest(t)
+    if type_ == "consolidating":   msg = msg_consolidating(t)
+    elif type_ == "breakout":      msg = msg_breakout(t)
+    elif type_ == "retest":        msg = msg_retest(t)
     elif type_ == "entry_confirmed": msg = msg_entry_confirmed(t)
+    elif type_ == "retest_fail":   msg = msg_retest_fail(t)
+    elif type_ == "wait_breakout": msg = msg_wait_breakout(t)
     else: return jsonify({"ok": False}), 400
     send_telegram(msg)
     return jsonify({"ok": True})
