@@ -455,9 +455,8 @@ async function submitTrade(){
 }
 
 async function quickPush(type){
-  const res = await fetch('/quick',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:type})});
-  if(res.ok) showToast('✅ 提醒已推送！');
-  else showToast('⚠️ 尚未設定單子');
+  await fetch(`/quick`,{method:`POST`,headers:{`Content-Type`:`application/json`},body:JSON.stringify({type:type})});
+  showToast(`✅ 提醒已推送！`);
 }
 
 async function submitResult(){
@@ -543,17 +542,33 @@ def sop():
 
 @app.route("/quick", methods=["POST"])
 def quick():
-    if not current_trade:
-        return jsonify({"ok": False, "error": "no trade"}), 400
     data = request.get_json(force=True)
     type_ = data.get("type")
     price = data.get("price", "—")
-    t = current_trade
-    if type_ == "tp1":          msg = msg_tp1(t)
-    elif type_ == "profit":     msg = msg_profit(t, price)
-    elif type_ == "sl_warning": msg = msg_sl_warning(t, price)
-    elif type_ == "close":      msg = msg_close(t)
-    else: return jsonify({"ok": False}), 400
+    t = current_trade if current_trade else {}
+
+    if type_ == "tp1":
+        if t:
+            msg = msg_tp1(t)
+        else:
+            msg = "✅ <b>XAU/USD TP1 達到！</b>\n━━━━━━━━━━━━━━━\n⚡ 動作：執行讓利出場"
+    elif type_ == "profit":
+        if t:
+            msg = msg_profit(t, price)
+        else:
+            msg = "💰 <b>XAU/USD 讓利提醒</b>\n━━━━━━━━━━━━━━━\n建議出場｜一半倉位先走"
+    elif type_ == "sl_warning":
+        if t:
+            msg = msg_sl_warning(t, price)
+        else:
+            msg = "🚨 <b>XAU/USD 停損警告！</b>\n━━━━━━━━━━━━━━━\n⚠️ 價格接近停損！請確認部位\n❌ 若觸及停損：立即出場勿凹單"
+    elif type_ == "close":
+        if t:
+            msg = msg_close(t)
+        else:
+            msg = "🏁 <b>XAU/USD 本波結束</b>\n━━━━━━━━━━━━━━━\n📌 等新區間形成再規劃下一波\n🔄 停手觀察，勿追行情"
+    else:
+        return jsonify({"ok": False}), 400
     send_telegram(msg)
     return jsonify({"ok": True})
 
