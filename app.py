@@ -455,8 +455,8 @@ async function submitTrade(){
 }
 
 async function quickPush(type){
-  await fetch(`/quick`,{method:`POST`,headers:{`Content-Type`:`application/json`},body:JSON.stringify({type:type})});
-  showToast(`✅ 提醒已推送！`);
+  await fetch('/quick',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:type})});
+  showToast('✅ 提醒已推送！');
 }
 
 async function submitResult(){
