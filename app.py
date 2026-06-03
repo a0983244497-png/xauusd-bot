@@ -320,7 +320,13 @@ def webhook():
 
     if alert_type == "consolidating":
         if current_trade:
-            send_telegram(msg_consolidating(current_trade))
+            message = msg_consolidating(current_trade)
+        else:
+            message = ("⏳ <b>XAU/USD 15分區間整理中</b>\n"
+                      f"━━━━━━━━━━━━━━━\n"
+                      f"📌 等待突破訊號，尚未進場\n"
+                      f"🔍 持續觀察區間形成")
+        send_telegram(message)
         return jsonify({"ok": True})
 
     if alert_type == "breakout":
