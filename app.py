@@ -109,6 +109,25 @@ def msg_retest(t):
             f"━━━━━━━━━━━━━━━\n"
             f"⚡ 等待第三根K棒確認進場")
 
+def msg_watch_m5(t):
+    if t:
+        direction = "向上" if t["direction"] == "long" else "向下"
+        return (f"👁 <b>XAU/USD 注意5分回測！</b>\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"動能過強，M15 直接噴出\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"📌 切換 M5 觀察\n"
+                f"等 M5 第一根突破 {direction}\n"
+                f"第二根回測確認\n"
+                f"第三根再進場\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"⚠️ 勿追市，等 M5 結構確認")
+    return (f"👁 <b>XAU/USD 注意5分回測！</b>\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"動能過強，M15 直接噴出\n"
+            f"📌 切換 M5 等回測結構確認\n"
+            f"⚠️ 勿追市，等 M5 第三根進場")
+
 def msg_retest_fail(t):
     if t:
         direction = "多單" if t["direction"] == "long" else "空單"
@@ -214,7 +233,8 @@ input:focus{border-color:#6366f1}
 .sop-alert-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
 .btn-retest-fail{padding:9px 8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;transition:opacity 0.2s;font-family:'Noto Sans TC',sans-serif;background:rgba(248,113,113,0.15);border:1px solid rgba(248,113,113,0.3);color:#f87171}
 .btn-wait-breakout{padding:9px 8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;transition:opacity 0.2s;font-family:'Noto Sans TC',sans-serif;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.3);color:#fbbf24}
-.btn-retest-fail:hover,.btn-wait-breakout:hover{opacity:0.8}
+.btn-watch-m5{width:100%;padding:9px 8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;transition:opacity 0.2s;font-family:'Noto Sans TC',sans-serif;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;margin-top:8px}
+.btn-retest-fail:hover,.btn-wait-breakout:hover,.btn-watch-m5:hover{opacity:0.8}
 </style>
 </head>
 <body>
@@ -253,6 +273,7 @@ input:focus{border-color:#6366f1}
   <button class="btn-retest-fail" onclick="triggerSOPAlert('retest_fail')">❌ 回測失敗</button>
   <button class="btn-wait-breakout" onclick="triggerSOPAlert('wait_breakout')">🔁 重新等待突破</button>
 </div>
+<button class="btn-watch-m5" onclick="triggerSOPAlert('watch_m5')">👁 注意5分回測！動能過強切M5等結構</button>
 </div>
 
 <div class="card">
@@ -340,6 +361,9 @@ async function triggerSOPAlert(type){
       // 清除全部燈號，重回觀察
       for(let i=0;i<4;i++) document.getElementById('step'+i).classList.remove('done');
       showToast('🔁 重新等待突破已推送 TG');
+    } else if(type==='watch_m5'){
+      // 燈號不變，只推送提醒
+      showToast('👁 注意5分回測已推送 TG');
     }
   } else {
     showToast('❌ 推送失敗',true);
@@ -499,6 +523,11 @@ def webhook():
     }
 
     # 警示類型：回測失敗 & 重新等待突破
+    if alert_type == "watch_m5":
+        message = msg_watch_m5(current_trade)
+        send_telegram(message)
+        return jsonify({"ok": True})
+
     if alert_type == "retest_fail":
         # 清除step1,2,3觸發記錄
         triggered = sop_status.get("triggered", [])
