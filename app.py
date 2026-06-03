@@ -11,7 +11,6 @@ CHAT_ID = os.environ.get("CHAT_ID")
 
 current_trade = {}
 sop_status = {"step": 0}
-# step 0 = 等待突破, 1 = 已突破, 2 = 已回測, 3 = 已進場
 
 def send_telegram(message):
     if not BOT_TOKEN or not CHAT_ID:
@@ -74,6 +73,14 @@ def msg_close(t):
             f"📌 等新區間形成再規劃下一波\n"
             f"🔄 停手觀察，勿追行情")
 
+def msg_consolidating(t):
+    return (f"⏳ <b>XAU/USD 15分整理中</b>\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"關鍵位｜{t['entry']}\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"📌 等待突破訊號，尚未進場\n"
+            f"🔍 持續觀察區間形成")
+
 def msg_breakout(t):
     direction = "向下突破" if t["direction"] == "short" else "向上突破"
     return (f"⚡ <b>XAU/USD 突破訊號！</b>\n"
@@ -88,6 +95,17 @@ def msg_retest(t):
             f"回測 {t['entry']} 守住\n"
             f"━━━━━━━━━━━━━━━\n"
             f"⚡ 等待第三根K棒確認進場")
+
+def msg_entry_confirmed(t):
+    direction = "多單 LONG ▲" if t["direction"] == "long" else "空單 SHORT ▼"
+    return (f"🎯 <b>XAU/USD 第三根進場！</b>\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"方向｜{direction}\n"
+            f"進場價｜{t['entry']}\n"
+            f"停損｜{t['sl']}\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"🎯 TP1｜{t['tp1']}\n"
+            f"🎯 TP2｜{t['tp2']}")
 
 HTML = """<!DOCTYPE html>
 <html lang="zh-TW">
@@ -133,16 +151,20 @@ input:focus{border-color:#6366f1}
 .clear-btn:hover{border-color:#f87171;color:#f87171}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e2637;border:1px solid #34d399;color:#34d399;padding:10px 24px;border-radius:8px;font-size:13px;font-family:'IBM Plex Mono',monospace;opacity:0;transition:opacity 0.3s;pointer-events:none;z-index:999;white-space:nowrap}
 .toast.show{opacity:1}.toast.error{border-color:#f87171;color:#f87171}
-.sop-steps{display:flex;flex-direction:column;gap:8px}
+.consolidate-btn{width:100%;padding:10px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.3);border-radius:8px;color:#818cf8;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:12px;font-family:'Noto Sans TC',sans-serif}
+.consolidate-btn:hover{opacity:0.8}
+.sop-steps{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
 .sop-step{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:8px;background:#1e2637;border:1px solid #2a3550}
 .sop-step.active{background:rgba(251,191,36,0.1);border-color:rgba(251,191,36,0.3)}
 .sop-step.done{background:rgba(52,211,153,0.1);border-color:rgba(52,211,153,0.3)}
 .sop-dot{width:10px;height:10px;border-radius:50%;background:#2a3550;flex-shrink:0}
 .sop-step.active .sop-dot{background:#fbbf24;box-shadow:0 0 6px #fbbf24}
 .sop-step.done .sop-dot{background:#34d399}
-.sop-label{font-size:13px;color:#6b7a99}
+.sop-label{font-size:13px;color:#6b7a99;flex:1}
 .sop-step.active .sop-label{color:#fbbf24;font-weight:600}
 .sop-step.done .sop-label{color:#34d399}
+.sop-btn{padding:5px 12px;border-radius:6px;border:none;font-size:11px;font-weight:600;cursor:pointer;font-family:'Noto Sans TC',sans-serif;display:none}
+.sop-step.active .sop-btn{display:block;background:rgba(251,191,36,0.2);color:#fbbf24;border:1px solid rgba(251,191,36,0.4)}
 </style>
 </head>
 <body>
@@ -153,10 +175,11 @@ input:focus{border-color:#6366f1}
 
 <div class="card">
   <div class="card-title">🚦 SOP 進場燈號</div>
-  <div class="sop-steps" id="sopSteps">
-    <div class="sop-step" id="step0"><div class="sop-dot"></div><span class="sop-label">等待突破關鍵位</span></div>
-    <div class="sop-step" id="step1"><div class="sop-dot"></div><span class="sop-label">第一根 K 棒突破</span></div>
-    <div class="sop-step" id="step2"><div class="sop-dot"></div><span class="sop-label">第二根回測確認</span></div>
+  <button class="consolidate-btn" onclick="sendConsolidating()">⏳ 15分區間整理中 → 推送到 TG</button>
+  <div class="sop-steps">
+    <div class="sop-step" id="step0"><div class="sop-dot"></div><span class="sop-label">等待突破關鍵位</span><button class="sop-btn" onclick="advanceSOP(1)">已突破 ✓</button></div>
+    <div class="sop-step" id="step1"><div class="sop-dot"></div><span class="sop-label">第一根 K 棒突破</span><button class="sop-btn" onclick="advanceSOP(2)">已回測 ✓</button></div>
+    <div class="sop-step" id="step2"><div class="sop-dot"></div><span class="sop-label">第二根回測確認</span><button class="sop-btn" onclick="advanceSOP(3)">已進場 ✓</button></div>
     <div class="sop-step" id="step3"><div class="sop-dot"></div><span class="sop-label">第三根進場執行</span></div>
   </div>
 </div>
@@ -213,8 +236,9 @@ window.onload=function(){
   }
   loadStatus();
   loadSOP();
-  setInterval(loadSOP, 3000);
 }
+
+async function sendConsolidating(){const res=await fetch('/webhook',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'consolidating'})});const data=await res.json();if(data.ok)showToast('✅ 整理中訊號已推送到 TG！');else showToast('❌ 先設定單子再推送',true)}
 
 function updateSOPUI(step){
   for(let i=0;i<4;i++){
@@ -233,11 +257,19 @@ async function loadSOP(){
   }catch(e){}
 }
 
+async function advanceSOP(step){
+  const typeMap={1:'breakout',2:'retest',3:'entry_confirmed'};
+  await fetch('/webhook',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:typeMap[step]})});
+  updateSOPUI(step);
+  const labels={1:'突破訊號已推送到 TG！',2:'回測確認已推送到 TG！',3:'進場確認已推送到 TG！'};
+  showToast('✅ '+labels[step]);
+}
+
 function setDirection(d){direction=d;document.getElementById('btnLong').className='dir-btn'+(d==='long'?' active-long':'');document.getElementById('btnShort').className='dir-btn'+(d==='short'?' active-short':'');calcTP()}
 function calcTP(){const entry=parseFloat(document.getElementById('entry').value);const range=parseFloat(document.getElementById('range').value);if(!entry||!range)return;const tp1=direction==='long'?(entry+range).toFixed(2):(entry-range).toFixed(2);const tp2=direction==='long'?(entry+range*2).toFixed(2):(entry-range*2).toFixed(2);document.getElementById('tp1').value=tp1;document.getElementById('tp2').value=tp2;document.getElementById('autoTag').textContent='✓ TP1 '+tp1+'  TP2 '+tp2}
 async function submitTrade(){const entry=document.getElementById('entry').value;const sl=document.getElementById('sl').value;const tp1=document.getElementById('tp1').value;const tp2=document.getElementById('tp2').value;const range=document.getElementById('range').value;if(!entry||!sl||!tp1||!tp2){showToast('請填入所有欄位',true);return}const res=await fetch('/set_trade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({direction,entry,sl,tp1,tp2,range})});const data=await res.json();if(data.ok){showToast('✅ 已儲存並推送進場提醒！');document.getElementById('autofillBanner').style.display='none';loadStatus()}else showToast('❌ 發送失敗',true)}
-async function sendAlert(type){const res=await fetch('/webhook',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,price:'—'})});const data=await res.json();if(data.ok){showToast('✅ 提醒已推送到 TG！');if(type==='close')loadStatus()}else showToast(data.error||'❌ 先設定單子再推送',true)}
-async function clearTrade(){await fetch('/clear_trade',{method:'POST'});await fetch('/sop_reset',{method:'POST'});showToast('🗑 單子已清除');loadStatus();loadSOP()}
+async function sendAlert(type){const res=await fetch('/webhook',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,price:'—'})});const data=await res.json();if(data.ok){showToast('✅ 提醒已推送到 TG！');if(type==='close'){loadStatus();loadSOP();}}else showToast(data.error||'❌ 先設定單子再推送',true)}
+async function clearTrade(){await fetch('/clear_trade',{method:'POST'});showToast('🗑 單子已清除');loadStatus();updateSOPUI(0)}
 async function loadStatus(){const res=await fetch('/trade');const t=await res.json();const el=document.getElementById('statusContent');if(!t.entry){el.innerHTML='<div class="status-empty">尚未設定單子</div>';return}const dirColor=t.direction==='long'?'green':'red';const dirText=t.direction==='long'?'▲ 多單 LONG':'▼ 空單 SHORT';el.innerHTML='<div class="trade-row"><span class="trade-label">方向</span><span class="trade-val '+dirColor+'">'+dirText+'</span></div><div class="trade-row"><span class="trade-label">進場價</span><span class="trade-val">'+t.entry+'</span></div><div class="trade-row"><span class="trade-label">停損</span><span class="trade-val red">'+t.sl+'</span></div><div class="trade-row"><span class="trade-label">TP1</span><span class="trade-val green">'+t.tp1+'</span></div><div class="trade-row"><span class="trade-label">TP2</span><span class="trade-val purple">'+t.tp2+'</span></div>'}
 function showToast(msg,isError=false){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(isError?' error':'');setTimeout(()=>{t.className='toast'},3000)}
 </script>
@@ -272,12 +304,6 @@ def get_trade():
 def get_sop():
     return jsonify(sop_status)
 
-@app.route("/sop_reset", methods=["POST"])
-def sop_reset():
-    global sop_status
-    sop_status = {"step": 0}
-    return jsonify({"ok": True})
-
 @app.route("/clear_trade", methods=["POST"])
 def clear_trade():
     global current_trade, sop_status
@@ -291,6 +317,11 @@ def webhook():
     data = request.json
     alert_type = data.get("type", "")
     price = data.get("price", "N/A")
+
+    if alert_type == "consolidating":
+        if current_trade:
+            send_telegram(msg_consolidating(current_trade))
+        return jsonify({"ok": True})
 
     if alert_type == "breakout":
         sop_status["step"] = 1
@@ -306,6 +337,8 @@ def webhook():
 
     if alert_type == "entry_confirmed":
         sop_status["step"] = 3
+        if current_trade:
+            send_telegram(msg_entry_confirmed(current_trade))
         return jsonify({"ok": True})
 
     if not current_trade:
