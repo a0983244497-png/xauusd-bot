@@ -2,7 +2,6 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
 import os
-from datetime import datetime, timezone, timedelta
 
 app = Flask(__name__)
 CORS(app)
@@ -10,21 +9,8 @@ CORS(app)
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
-TZ_TAIPEI = timezone(timedelta(hours=8))
-
 current_trade = {}
-sop_status = {"step": -1, "triggered": []}
-daily_stats = {"wins": 0, "losses": 0, "date": ""}
-
-def get_today():
-    return datetime.now(TZ_TAIPEI).strftime("%Y-%m-%d")
-
-def reset_if_new_day():
-    today = get_today()
-    if daily_stats["date"] != today:
-        daily_stats["wins"] = 0
-        daily_stats["losses"] = 0
-        daily_stats["date"] = today
+sop_status = {"step": 0}
 
 def send_telegram(message):
     if not BOT_TOKEN or not CHAT_ID:
@@ -88,134 +74,38 @@ def msg_close(t):
             f"🔄 停手觀察，勿追行情")
 
 def msg_consolidating(t):
-    if t:
-        return (f"⏳ <b>XAU/USD 15分整理中</b>\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"關鍵位｜{t['entry']}\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"📌 等待突破訊號，尚未進場\n"
-                f"🔍 持續觀察區間形成")
-    return (f"⏳ <b>XAU/USD 15分區間整理中</b>\n"
+    return (f"⏳ <b>XAU/USD 15分整理中</b>\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"關鍵位｜{t['entry']}\n"
             f"━━━━━━━━━━━━━━━\n"
             f"📌 等待突破訊號，尚未進場\n"
             f"🔍 持續觀察區間形成")
 
 def msg_breakout(t):
-    if t:
-        direction = "向下突破" if t["direction"] == "short" else "向上突破"
-        return (f"⚡ <b>XAU/USD 突破訊號！</b>\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"{direction} {t['entry']}\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"📌 等待回測確認，準備進場")
+    direction = "向下突破" if t["direction"] == "short" else "向上突破"
     return (f"⚡ <b>XAU/USD 突破訊號！</b>\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"{direction} {t['entry']}\n"
             f"━━━━━━━━━━━━━━━\n"
             f"📌 等待回測確認，準備進場")
 
 def msg_retest(t):
-    if t:
-        return (f"🔄 <b>XAU/USD 回測確認！</b>\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"回測 {t['entry']} 守住\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"⚡ 等待第三根K棒確認進場")
     return (f"🔄 <b>XAU/USD 回測確認！</b>\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"回測 {t['entry']} 守住\n"
             f"━━━━━━━━━━━━━━━\n"
             f"⚡ 等待第三根K棒確認進場")
 
 def msg_entry_confirmed(t):
-    if t:
-        direction = "多單 LONG ▲" if t["direction"] == "long" else "空單 SHORT ▼"
-        return (f"🎯 <b>XAU/USD 第三根進場！</b>\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"方向｜{direction}\n"
-                f"進場價｜{t['entry']}\n"
-                f"停損｜{t['sl']}\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"🎯 TP1｜{t['tp1']}\n"
-                f"🎯 TP2｜{t['tp2']}")
+    direction = "多單 LONG ▲" if t["direction"] == "long" else "空單 SHORT ▼"
     return (f"🎯 <b>XAU/USD 第三根進場！</b>\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"⚡ 進場執行中")
-
-def msg_retest_fail(t):
-    if t:
-        return (f"❌ <b>XAU/USD 回測失敗</b>\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"回測 {t['entry']} 未守住\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"🚫 訊號取消，等待重新整理\n"
-                f"📌 保持觀察，勿追入")
-    return (f"❌ <b>XAU/USD 回測失敗</b>\n"
+            f"方向｜{direction}\n"
+            f"進場價｜{t['entry']}\n"
+            f"停損｜{t['sl']}\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"🚫 訊號取消，等待重新整理")
-
-def msg_wait_breakout(t):
-    return (f"🔁 <b>XAU/USD 重新等待突破</b>\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"行情假突破，訊號失效\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"🔍 回到觀察模式\n"
-            f"📌 等待新區間突破再規劃")
-
-def msg_watch_m5(t):
-    if t:
-        direction = "向上" if t["direction"] == "long" else "向下"
-        return (f"👁 <b>XAU/USD 注意5分回測！</b>\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"動能過強，M15 直接噴出\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"📌 切換 M5 觀察\n"
-                f"等 M5 第一根突破 {direction}\n"
-                f"第二根回測確認，第三根進場\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"⚠️ 勿追市，等 M5 結構確認")
-    return (f"👁 <b>XAU/USD 注意5分回測！</b>\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"動能過強，M15 直接噴出\n"
-            f"📌 切換 M5 等回測結構確認\n"
-            f"⚠️ 勿追市，等 M5 第三根進場")
-
-def msg_result(data):
-    result = data.get("result", "win").lower()
-    entry  = float(data.get("entry", 0))
-    exit_  = float(data.get("exit", 0))
-    pnl    = abs(float(data.get("pnl", 0)))
-    lot    = data.get("lot")
-    note   = data.get("note", "").strip()
-
-    is_win   = result == "win"
-    emoji    = "✅" if is_win else "❌"
-    label    = "獲利" if is_win else "停損"
-    pnl_sign = "+" if is_win else "-"
-
-    reset_if_new_day()
-    if is_win:
-        daily_stats["wins"] += 1
-    else:
-        daily_stats["losses"] += 1
-
-    now_str = datetime.now(TZ_TAIPEI).strftime("%H:%M")
-
-    lines = [
-        f"📋 <b>交易結果｜XAUUSD</b>",
-        f"━━━━━━━━━━━━━━",
-        f"結果：{emoji} {label}",
-        f"進場：${entry:,.2f}",
-        f"出場：${exit_:,.2f}",
-        f"損益：{pnl_sign}${pnl:,.2f}",
-    ]
-    if lot:
-        lines.append(f"手數：{float(lot):.2f} lot")
-    if note:
-        lines.append(f"備註：{note}")
-    lines += [
-        f"━━━━━━━━━━━━━━",
-        f"今日戰績：{daily_stats['wins']}勝 {daily_stats['losses']}負",
-        f"<i>{now_str} TST</i>",
-    ]
-    return "\n".join(lines)
-
+            f"🎯 TP1｜{t['tp1']}\n"
+            f"🎯 TP2｜{t['tp2']}")
 
 HTML = """<!DOCTYPE html>
 <html lang="zh-TW">
@@ -226,387 +116,279 @@ HTML = """<!DOCTYPE html>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+TC:wght@400;500;700&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#0f1117;font-family:'Noto Sans TC',sans-serif;color:#d1d9f0;min-height:100vh;padding:20px}
-.container{max-width:480px;margin:0 auto}
-h1{font-size:18px;font-weight:700;color:#f0c040;margin-bottom:4px;letter-spacing:1px}
-.subtitle{font-size:12px;color:#6b7280;margin-bottom:20px}
-.hint-bar{background:#1a2035;border:1px solid #2a3a5c;border-radius:8px;padding:10px 14px;font-size:12px;color:#60a0ff;margin-bottom:16px;display:none}
-.hint-bar.show{display:block}
-.section-title{font-size:11px;color:#6b7280;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px}
-
-/* SOP */
-.sop-steps{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
-.sop-step{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1a1f2e;border:1px solid #2a3a5c;border-radius:8px;transition:all .2s}
-.sop-step.active{border-color:#f0c040;background:#1e2235}
-.sop-step.done{border-color:#22c55e;background:#0f2318}
-.sop-step.fail{border-color:#ef4444;background:#2a0a0a}
-.sop-dot{width:8px;height:8px;border-radius:50%;background:#374151;flex-shrink:0}
-.sop-step.active .sop-dot{background:#f0c040}
-.sop-step.done .sop-dot{background:#22c55e}
-.sop-step.fail .sop-dot{background:#ef4444}
-.sop-label{flex:1;font-size:13px}
-.sop-btn{font-size:11px;padding:4px 10px;background:#1e3a5c;border:1px solid #2a5080;color:#60a0ff;border-radius:6px;cursor:pointer;white-space:nowrap}
-.sop-btn:active{transform:scale(.97)}
-.sop-btn.red{background:#2a0a0a;border-color:#5c1a1a;color:#ef4444}
-.sop-btn.gray{background:#1a1f2e;border-color:#374151;color:#9ca3af}
-.sop-extra{display:flex;gap:6px;margin-bottom:6px}
-.sop-extra button{flex:1;padding:8px;font-size:12px;border-radius:8px;cursor:pointer;transition:all .15s}
-.btn-watch-m5{width:100%;padding:9px;font-size:12px;font-weight:600;border-radius:8px;cursor:pointer;transition:all .15s;margin-top:0px;margin-bottom:16px;background:#1a1535;border:1px solid #7c3aed66;color:#a78bfa}
-.btn-watch-m5:active{transform:scale(.97)}
-.btn-retest-fail{background:#2a0a0a;border:1px solid #ef444466;color:#ef4444}
-.btn-wait-breakout{background:#1a1f2e;border:1px solid #37415166;color:#9ca3af}
-
-/* Trade card */
-.trade-card{background:#1a1f2e;border:1px solid #2a3a5c;border-radius:10px;padding:16px;margin-bottom:16px}
-.trade-card.long{border-color:#22c55e}
-.trade-card.short{border-color:#ef4444}
-.trade-header{display:flex;align-items:center;gap:8px;margin-bottom:12px}
-.direction-badge{font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px}
-.direction-badge.long{background:#0f2318;color:#22c55e}
-.direction-badge.short{background:#2a0a0a;color:#ef4444}
-.trade-row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px}
-.trade-label{color:#6b7280}
-.trade-val{font-family:'IBM Plex Mono',monospace;color:#d1d9f0}
-.trade-val.tp{color:#60a0ff}
-.no-trade{color:#4b5563;font-size:13px;text-align:center;padding:10px 0}
-
-/* Form */
-.form-section{background:#1a1f2e;border:1px solid #2a3a5c;border-radius:10px;padding:16px;margin-bottom:16px}
-.form-section summary{font-size:13px;font-weight:500;cursor:pointer;color:#9ca3af;list-style:none}
-.form-section summary::-webkit-details-marker{display:none}
-.form-section[open] summary{color:#f0c040;margin-bottom:14px}
-.dir-toggle{display:flex;gap:8px;margin-bottom:12px}
-.dir-btn{flex:1;padding:9px;font-size:13px;font-weight:600;border-radius:8px;border:1px solid #374151;background:#111827;color:#6b7280;cursor:pointer;transition:all .15s}
-.dir-btn.long.active{background:#0f2318;border-color:#22c55e;color:#22c55e}
-.dir-btn.short.active{background:#2a0a0a;border-color:#ef4444;color:#ef4444}
-.field{margin-bottom:10px}
-.field label{display:block;font-size:11px;color:#6b7280;margin-bottom:4px}
-.field input{width:100%;background:#111827;border:1px solid #374151;border-radius:6px;padding:8px 10px;font-size:14px;color:#d1d9f0;font-family:'IBM Plex Mono',monospace}
-.field input:focus{outline:none;border-color:#60a0ff}
-.field input[readonly]{color:#60a0ff}
-.send-btn{width:100%;padding:12px;background:#1e3a5c;border:1px solid #2a5080;color:#60c0ff;font-size:14px;font-weight:600;border-radius:8px;cursor:pointer;margin-top:4px;transition:all .15s}
-.send-btn:active{transform:scale(.98)}
-
-/* Quick buttons */
-.quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
-.quick-btn{padding:10px;font-size:12px;background:#1a1f2e;border:1px solid #2a3a5c;color:#9ca3af;border-radius:8px;cursor:pointer;transition:all .15s}
-.quick-btn:active{transform:scale(.97)}
-.quick-btn.tp1{border-color:#22c55e;color:#22c55e}
-.quick-btn.profit{border-color:#60a0ff;color:#60a0ff}
-.quick-btn.sl{border-color:#ef4444;color:#ef4444}
-.quick-btn.close{border-color:#f0c040;color:#f0c040}
-.clear-btn{width:100%;padding:8px;font-size:12px;background:transparent;border:1px solid #374151;color:#4b5563;border-radius:8px;cursor:pointer;margin-bottom:20px}
-
-/* 結果回報 */
-.result-section{background:#1a1f2e;border:1px solid #2a3a5c;border-radius:10px;padding:16px;margin-bottom:16px}
-.result-section summary{font-size:13px;font-weight:500;cursor:pointer;color:#9ca3af;list-style:none}
-.result-section summary::-webkit-details-marker{display:none}
-.result-section[open] summary{color:#f0c040;margin-bottom:14px}
-.result-toggle{display:flex;gap:8px;margin-bottom:12px}
-.result-btn{flex:1;padding:9px;font-size:13px;font-weight:600;border-radius:8px;border:1px solid #374151;background:#111827;color:#6b7280;cursor:pointer;transition:all .15s}
-.result-btn.win.active{background:#0f2318;border-color:#22c55e;color:#22c55e}
-.result-btn.loss.active{background:#2a0a0a;border-color:#ef4444;color:#ef4444}
-.result-send-btn{width:100%;padding:12px;background:#1e3a2a;border:1px solid #22c55e44;color:#22c55e;font-size:14px;font-weight:600;border-radius:8px;cursor:pointer;margin-top:4px}
-.result-send-btn:active{transform:scale(.98)}
-
-/* Toast */
-.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:#1e3a5c;border:1px solid #2a5080;color:#60c0ff;padding:10px 20px;border-radius:20px;font-size:13px;opacity:0;transition:all .3s;pointer-events:none;z-index:999}
-.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+body{background:#0f1117;font-family:'Noto Sans TC',sans-serif;color:#d1d9f0;min-height:100vh;padding:32px 16px;display:flex;flex-direction:column;align-items:center}
+.container{width:100%;max-width:480px}
+h1{font-size:20px;font-weight:700;color:#f0f4ff;margin-bottom:4px}
+.subtitle{font-size:12px;color:#6b7a99;font-family:'IBM Plex Mono',monospace;margin-bottom:28px}
+.card{background:#161b27;border:1px solid #232b3e;border-radius:12px;padding:18px 20px;margin-bottom:16px}
+.card-title{font-size:11px;font-weight:600;color:#4b5a7a;letter-spacing:1px;text-transform:uppercase;margin-bottom:14px}
+.status-empty{font-size:13px;color:#4b5a7a;font-family:'IBM Plex Mono',monospace;text-align:center;padding:8px 0}
+.trade-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:8px}
+.trade-label{color:#6b7a99}
+.trade-val{font-family:'IBM Plex Mono',monospace;font-weight:600;color:#f0f4ff}
+.trade-val.green{color:#34d399}.trade-val.red{color:#f87171}.trade-val.purple{color:#a78bfa}
+.dir-group{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.dir-btn{padding:10px;border-radius:8px;border:1px solid #232b3e;background:#1e2637;color:#6b7a99;font-size:13px;font-weight:600;cursor:pointer;text-align:center;transition:all 0.2s}
+.dir-btn.active-long{background:rgba(52,211,153,0.15);border-color:rgba(52,211,153,0.4);color:#34d399}
+.dir-btn.active-short{background:rgba(248,113,113,0.15);border-color:rgba(248,113,113,0.4);color:#f87171}
+.input-group{margin-bottom:14px}
+label{display:block;font-size:11px;color:#6b7a99;margin-bottom:6px;font-family:'IBM Plex Mono',monospace}
+input{width:100%;background:#1e2637;border:1px solid #2a3550;border-radius:8px;padding:10px 14px;font-size:14px;font-family:'IBM Plex Mono',monospace;color:#f0f4ff;outline:none;transition:border-color 0.2s}
+input:focus{border-color:#6366f1}
+.auto-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.auto-tag{font-size:10px;color:#34d399;font-family:'IBM Plex Mono',monospace;margin-top:4px}
+.submit-btn{width:100%;padding:13px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;margin-top:4px;transition:opacity 0.2s}
+.submit-btn:hover{opacity:0.85}
+.autofill-banner{background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#34d399;font-family:'IBM Plex Mono',monospace;display:none}
+.quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.quick-btn{padding:10px 8px;border-radius:8px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:opacity 0.2s;font-family:'Noto Sans TC',sans-serif}
+.quick-btn:hover{opacity:0.8}
+.btn-tp1{background:rgba(52,211,153,0.15);border:1px solid rgba(52,211,153,0.3);color:#34d399}
+.btn-profit{background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.3);color:#fbbf24}
+.btn-sl{background:rgba(248,113,113,0.15);border:1px solid rgba(248,113,113,0.3);color:#f87171}
+.btn-close{background:rgba(107,122,153,0.15);border:1px solid rgba(107,122,153,0.3);color:#6b7a99}
+.clear-btn{width:100%;padding:9px;background:transparent;border:1px solid #2a3550;border-radius:8px;color:#4b5a7a;font-size:12px;cursor:pointer;margin-top:8px;font-family:'Noto Sans TC',sans-serif}
+.clear-btn:hover{border-color:#f87171;color:#f87171}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e2637;border:1px solid #34d399;color:#34d399;padding:10px 24px;border-radius:8px;font-size:13px;font-family:'IBM Plex Mono',monospace;opacity:0;transition:opacity 0.3s;pointer-events:none;z-index:999;white-space:nowrap}
+.toast.show{opacity:1}.toast.error{border-color:#f87171;color:#f87171}
+.consolidate-btn{width:100%;padding:10px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.3);border-radius:8px;color:#818cf8;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:12px;font-family:'Noto Sans TC',sans-serif}
+.consolidate-btn:hover{opacity:0.8}
+.sop-steps{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+.sop-step{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:8px;background:#1e2637;border:1px solid #2a3550}
+.sop-step.active{background:rgba(251,191,36,0.1);border-color:rgba(251,191,36,0.3)}
+.sop-step.done{background:rgba(52,211,153,0.1);border-color:rgba(52,211,153,0.3)}
+.sop-dot{width:10px;height:10px;border-radius:50%;background:#2a3550;flex-shrink:0}
+.sop-step.active .sop-dot{background:#fbbf24;box-shadow:0 0 6px #fbbf24}
+.sop-step.done .sop-dot{background:#34d399}
+.sop-label{font-size:13px;color:#6b7a99;flex:1}
+.sop-step.active .sop-label{color:#fbbf24;font-weight:600}
+.sop-step.done .sop-label{color:#34d399}
+.sop-btn{padding:5px 12px;border-radius:6px;border:none;font-size:11px;font-weight:600;cursor:pointer;font-family:'Noto Sans TC',sans-serif;display:none}
+.sop-step.active .sop-btn{display:block;background:rgba(251,191,36,0.2);color:#fbbf24;border:1px solid rgba(251,191,36,0.4)}
 </style>
 </head>
 <body>
 <div class="container">
-  <h1>XAU/USD 交易管理</h1>
-  <p class="subtitle">輸入單子參數 → 自動推送 Telegram</p>
-  <div class="hint-bar" id="hintBar">⚡ 助教已自動帶入參數，確認後按送出即可！</div>
+<h1>XAU/USD 交易管理</h1>
+<p class="subtitle">輸入單子參數 → 自動推送 Telegram</p>
+<div class="autofill-banner" id="autofillBanner">⚡ 助教已自動帶入參數，確認後按送出即可！</div>
 
-  <!-- SOP -->
-  <p class="section-title">🚦 SOP 進場燈號</p>
+<div class="card">
+  <div class="card-title">🚦 SOP 進場燈號</div>
   <div class="sop-steps">
-    <div class="sop-step active" id="step0">
-      <div class="sop-dot"></div>
-      <span class="sop-label">⏳ 15分區間整理中</span>
-      <button class="sop-btn" onclick="triggerSOP('consolidating',0)">推送 TG</button>
-    </div>
-    <div class="sop-step" id="step1">
-      <div class="sop-dot"></div>
-      <span class="sop-label">⚡ 第一根 K 棒突破</span>
-      <button class="sop-btn" onclick="triggerSOP('breakout',1)">推送 TG</button>
-    </div>
-    <div class="sop-step" id="step2">
-      <div class="sop-dot"></div>
-      <span class="sop-label">🔄 第二根回測確認</span>
-      <button class="sop-btn" onclick="triggerSOP('retest',2)">推送 TG</button>
-    </div>
-    <div class="sop-step" id="step3">
-      <div class="sop-dot"></div>
-      <span class="sop-label">🎯 第三根進場執行</span>
-      <button class="sop-btn" onclick="triggerSOP('entry_confirmed',3)">推送 TG</button>
-    </div>
+    <div class="sop-step" id="step0"><div class="sop-dot"></div><span class="sop-label">等待突破關鍵位</span><button class="sop-btn" onclick="advanceSOP(1)">已突破 ✓</button></div>
+    <div class="sop-step" id="step1"><div class="sop-dot"></div><span class="sop-label">第一根 K 棒突破</span><button class="sop-btn" onclick="advanceSOP(2)">已回測 ✓</button></div>
+    <div class="sop-step" id="step2"><div class="sop-dot"></div><span class="sop-label">第二根回測確認</span><button class="sop-btn" onclick="advanceSOP(3)">已進場 ✓</button></div>
+    <div class="sop-step" id="step3"><div class="sop-dot"></div><span class="sop-label">第三根進場執行</span></div>
   </div>
-  <div class="sop-extra">
-    <button class="btn-retest-fail" onclick="triggerSOP('retest_fail', -1)">❌ 回測失敗</button>
-    <button class="btn-wait-breakout" onclick="triggerSOP('wait_breakout', -2)">🔁 重新等待突破</button>
-  </div>
-  <button class="btn-watch-m5" onclick="triggerSOP('watch_m5', -3)">👁 注意5分回測！動能過強切M5等結構</button>
-
-  <!-- 當前單子 -->
-  <p class="section-title">📋 當前單子</p>
-  <div id="tradeCard" class="trade-card">
-    <p class="no-trade">尚未設定單子</p>
-  </div>
-
-  <!-- 設定新單子 -->
-  <details class="form-section" id="formDetails">
-    <summary>➕ 設定新單子</summary>
-    <div class="dir-toggle">
-      <button class="dir-btn long active" id="btnLong" onclick="setDir('long')">▲ 多單 LONG</button>
-      <button class="dir-btn short" id="btnShort" onclick="setDir('short')">▼ 空單 SHORT</button>
-    </div>
-    <div class="field"><label>進場價</label><input type="number" id="entry" placeholder="3250.00" step="0.01" oninput="calcTP()"></div>
-    <div class="field"><label>停損價</label><input type="number" id="sl" placeholder="3240.00" step="0.01"></div>
-    <div class="field"><label>M15 區間距離（自動計算 TP）</label><input type="number" id="range" placeholder="25.00" step="0.01" oninput="calcTP()"></div>
-    <div class="field"><label>TP1（自動）</label><input type="number" id="tp1" readonly></div>
-    <div class="field"><label>TP2（自動）</label><input type="number" id="tp2" readonly></div>
-    <button class="send-btn" onclick="submitTrade()">📤 確認並推送進場提醒到 TG</button>
-  </details>
-
-  <!-- 快速推送 -->
-  <p class="section-title">⚡ 快速推送提醒</p>
-  <div class="quick-grid">
-    <button class="quick-btn tp1" onclick="quickPush('tp1')">✅ TP1 達到</button>
-    <button class="quick-btn profit" onclick="quickPush('profit')">💰 讓利提醒</button>
-    <button class="quick-btn sl" onclick="quickPush('sl_warning')">🚨 停損警告</button>
-    <button class="quick-btn close" onclick="quickPush('close')">🏁 本波收手</button>
-  </div>
-  <button class="clear-btn" onclick="clearTrade()">🗑 清除當前單子</button>
-
-  <!-- 結果回報 -->
-  <details class="result-section" id="resultDetails">
-    <summary>📋 交易結果回報</summary>
-    <div class="result-toggle">
-      <button class="result-btn win active" id="rBtnWin" onclick="setResult('win')">✅ 獲利</button>
-      <button class="result-btn loss" id="rBtnLoss" onclick="setResult('loss')">❌ 停損</button>
-    </div>
-    <div class="field"><label>進場價</label><input type="number" id="rEntry" placeholder="3320.00" step="0.01"></div>
-    <div class="field"><label>出場價</label><input type="number" id="rExit" placeholder="3335.00" step="0.01"></div>
-    <div class="field"><label>損益金額（$）</label><input type="number" id="rPnl" placeholder="150" step="0.01"></div>
-    <div class="field"><label>手數（選填）</label><input type="number" id="rLot" placeholder="0.10" step="0.01"></div>
-    <div class="field"><label>備註（選填）</label><input type="text" id="rNote" placeholder="M15撐壓回測進場"></div>
-    <button class="result-send-btn" onclick="submitResult()">📤 推送結果到 TG</button>
-  </details>
+  <button class="consolidate-btn" onclick="sendConsolidating()">⏳ 15分區間整理中 → 推送到 TG</button>
 </div>
 
+<div class="card">
+  <div class="card-title">📋 當前單子</div>
+  <div id="statusContent"><div class="status-empty">尚未設定單子</div></div>
+</div>
+
+<div class="card">
+  <div class="card-title">➕ 設定新單子</div>
+  <div class="dir-group">
+    <div class="dir-btn active-long" id="btnLong" onclick="setDirection('long')">▲ 多單 LONG</div>
+    <div class="dir-btn" id="btnShort" onclick="setDirection('short')">▼ 空單 SHORT</div>
+  </div>
+  <div class="input-group"><label>進場價</label><input type="number" id="entry" placeholder="例：4498.74" step="0.01" oninput="calcTP()"></div>
+  <div class="input-group"><label>停損價</label><input type="number" id="sl" placeholder="例：4462.8" step="0.01"></div>
+  <div class="input-group"><label>M15 區間距離（自動計算 TP）</label><input type="number" id="range" placeholder="例：32.26" step="0.01" oninput="calcTP()"><div class="auto-tag" id="autoTag"></div></div>
+  <div class="auto-row">
+    <div class="input-group"><label>TP1（自動）</label><input type="number" id="tp1" placeholder="自動帶入" step="0.01"></div>
+    <div class="input-group"><label>TP2（自動）</label><input type="number" id="tp2" placeholder="自動帶入" step="0.01"></div>
+  </div>
+  <button class="submit-btn" onclick="submitTrade()">📤 確認並推送進場提醒到 TG</button>
+</div>
+
+<div class="card">
+  <div class="card-title">⚡ 快速推送提醒</div>
+  <div class="input-group" style="margin-bottom:14px">
+    <label>當前價格（推送時帶入）</label>
+    <input type="number" id="currentPrice" placeholder="例：4485.5" step="0.01">
+  </div>
+  <div class="quick-grid">
+    <button class="quick-btn btn-tp1" onclick="sendAlert('tp1')">✅ TP1 達到</button>
+    <button class="quick-btn btn-profit" onclick="sendAlert('profit')">💰 讓利提醒</button>
+    <button class="quick-btn btn-sl" onclick="sendAlert('sl_warning')">🚨 停損警告</button>
+    <button class="quick-btn btn-close" onclick="sendAlert('close')">🏁 本波收手</button>
+  </div>
+  <button class="clear-btn" onclick="clearTrade()">🗑 清除當前單子</button>
+</div>
+</div>
 <div class="toast" id="toast"></div>
-
 <script>
-let direction = 'long';
-let resultType = 'win';
+let direction='long';
 
-const p = new URLSearchParams(location.search);
-if(p.get('direction')||p.get('entry')){
-  const d = p.get('direction')||'long';
-  setDir(d);
-  if(p.get('entry')) document.getElementById('entry').value = p.get('entry');
-  if(p.get('sl'))    document.getElementById('sl').value    = p.get('sl');
-  if(p.get('range')) document.getElementById('range').value = p.get('range');
-  if(p.get('tp1'))   document.getElementById('tp1').value   = p.get('tp1');
-  if(p.get('tp2'))   document.getElementById('tp2').value   = p.get('tp2');
-  document.getElementById('formDetails').open = true;
-  document.getElementById('hintBar').classList.add('show');
-}
-
-function setDir(d){
-  direction = d;
-  document.getElementById('btnLong').classList.toggle('active', d==='long');
-  document.getElementById('btnShort').classList.toggle('active', d==='short');
-  calcTP();
-}
-
-function setResult(r){
-  resultType = r;
-  document.getElementById('rBtnWin').classList.toggle('active', r==='win');
-  document.getElementById('rBtnLoss').classList.toggle('active', r==='loss');
-}
-
-function calcTP(){
-  const entry = parseFloat(document.getElementById('entry').value);
-  const range = parseFloat(document.getElementById('range').value);
-  if(!entry||!range) return;
-  const mult = direction==='long' ? 1 : -1;
-  document.getElementById('tp1').value = (entry + mult*range).toFixed(2);
-  document.getElementById('tp2').value = (entry + mult*range*2).toFixed(2);
-}
-
-function triggerSOP(type, step){
-  if(type === 'watch_m5'){
-    // 燈號不動，只推送 TG
-  } else if(type === 'retest_fail'){
-    document.getElementById('step1').className='sop-step fail';
-    document.getElementById('step2').className='sop-step';
-    document.getElementById('step3').className='sop-step';
-  } else if(type === 'wait_breakout'){
-    for(let i=0;i<4;i++) document.getElementById('step'+i).className='sop-step'+(i===0?' active':'');
-  } else {
-    document.getElementById('step'+step).classList.add('done');
+window.onload=function(){
+  const params=new URLSearchParams(window.location.search);
+  if(params.get('entry')){
+    const d=params.get('direction')||'long';
+    setDirection(d);
+    document.getElementById('entry').value=params.get('entry')||'';
+    document.getElementById('sl').value=params.get('sl')||'';
+    document.getElementById('range').value=params.get('range')||'';
+    document.getElementById('tp1').value=params.get('tp1')||'';
+    document.getElementById('tp2').value=params.get('tp2')||'';
+    if(params.get('range'))document.getElementById('autoTag').textContent='✓ TP1 '+params.get('tp1')+'  TP2 '+params.get('tp2');
+    document.getElementById('autofillBanner').style.display='block';
+    window.history.replaceState({},'','/');
   }
-  fetch('/sop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:type})})
-    .then(r=>r.json())
-    .then(()=>showToast('✅ 已推送到 TG！'))
-    .catch(()=>showToast('❌ 推送失敗',true));
+  loadStatus();
+  loadSOP();
 }
 
-async function submitTrade(){
-  const t = {
-    direction,
-    entry: document.getElementById('entry').value,
-    sl:    document.getElementById('sl').value,
-    range: document.getElementById('range').value,
-    tp1:   document.getElementById('tp1').value,
-    tp2:   document.getElementById('tp2').value
-  };
-  if(!t.entry||!t.sl||!t.range){showToast('⚠️ 請填寫必要欄位');return;}
-  const res = await fetch('/trade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(t)});
-  if(res.ok){
-    updateTradeCard(t);
-    document.getElementById('formDetails').open=false;
-    showToast('✅ 進場提醒已推送！');
+async function sendConsolidating(){const res=await fetch('/webhook',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'consolidating'})});const data=await res.json();if(data.ok)showToast('✅ 整理中訊號已推送到 TG！');else showToast('❌ 先設定單子再推送',true)}
+
+function updateSOPUI(step){
+  for(let i=0;i<4;i++){
+    const el=document.getElementById('step'+i);
+    el.className='sop-step';
+    if(i<step) el.classList.add('done');
+    else if(i===step) el.classList.add('active');
   }
 }
 
-async function quickPush(type){
-  await fetch('/quick',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:type})});
-  showToast('✅ 提醒已推送！');
+async function loadSOP(){
+  try{
+    const res=await fetch('/sop');
+    const data=await res.json();
+    updateSOPUI(data.step);
+  }catch(e){}
 }
 
-async function submitResult(){
-  const data = {
-    result: resultType,
-    entry:  document.getElementById('rEntry').value,
-    exit:   document.getElementById('rExit').value,
-    pnl:    document.getElementById('rPnl').value,
-    lot:    document.getElementById('rLot').value,
-    note:   document.getElementById('rNote').value
-  };
-  if(!data.entry||!data.exit||!data.pnl){showToast('⚠️ 請填寫進出場與損益');return;}
-  const res = await fetch('/result',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-  if(res.ok){
-    showToast('✅ 交易結果已推送！');
-    ['rEntry','rExit','rPnl','rLot','rNote'].forEach(id=>document.getElementById(id).value='');
-    document.getElementById('resultDetails').open=false;
-  }
+async function advanceSOP(step){
+  const typeMap={1:'breakout',2:'retest',3:'entry_confirmed'};
+  await fetch('/webhook',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:typeMap[step]})});
+  updateSOPUI(step);
+  const labels={1:'突破訊號已推送到 TG！',2:'回測確認已推送到 TG！',3:'進場確認已推送到 TG！'};
+  showToast('✅ '+labels[step]);
 }
 
-function clearTrade(){
-  fetch('/clear',{method:'POST'}).then(()=>{
-    document.getElementById('tradeCard').innerHTML='<p class="no-trade">尚未設定單子</p>';
-    document.getElementById('tradeCard').className='trade-card';
-    showToast('🗑 已清除當前單子');
-  });
-}
-
-function updateTradeCard(t){
-  const isLong = t.direction==='long';
-  const card = document.getElementById('tradeCard');
-  card.className = 'trade-card '+(isLong?'long':'short');
-  card.innerHTML = `
-    <div class="trade-header">
-      <span class="direction-badge ${isLong?'long':'short'}">${isLong?'▲ 多單 LONG':'▼ 空單 SHORT'}</span>
-    </div>
-    <div class="trade-row"><span class="trade-label">進場價</span><span class="trade-val">${t.entry}</span></div>
-    <div class="trade-row"><span class="trade-label">停損</span><span class="trade-val">${t.sl}</span></div>
-    <div class="trade-row"><span class="trade-label">TP1</span><span class="trade-val tp">${t.tp1}</span></div>
-    <div class="trade-row"><span class="trade-label">TP2</span><span class="trade-val tp">${t.tp2}</span></div>
-  `;
-}
-
-function showToast(msg){
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'), 2500);
-}
-
-fetch('/current').then(r=>r.json()).then(t=>{if(t&&t.entry) updateTradeCard(t);});
+function setDirection(d){direction=d;document.getElementById('btnLong').className='dir-btn'+(d==='long'?' active-long':'');document.getElementById('btnShort').className='dir-btn'+(d==='short'?' active-short':'');calcTP()}
+function calcTP(){const entry=parseFloat(document.getElementById('entry').value);const range=parseFloat(document.getElementById('range').value);if(!entry||!range)return;const tp1=direction==='long'?(entry+range).toFixed(2):(entry-range).toFixed(2);const tp2=direction==='long'?(entry+range*2).toFixed(2):(entry-range*2).toFixed(2);document.getElementById('tp1').value=tp1;document.getElementById('tp2').value=tp2;document.getElementById('autoTag').textContent='✓ TP1 '+tp1+'  TP2 '+tp2}
+async function submitTrade(){const entry=document.getElementById('entry').value;const sl=document.getElementById('sl').value;const tp1=document.getElementById('tp1').value;const tp2=document.getElementById('tp2').value;const range=document.getElementById('range').value;if(!entry||!sl||!tp1||!tp2){showToast('請填入所有欄位',true);return}const res=await fetch('/set_trade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({direction,entry,sl,tp1,tp2,range})});const data=await res.json();if(data.ok){showToast('✅ 已儲存並推送進場提醒！');document.getElementById('autofillBanner').style.display='none';loadStatus()}else showToast('❌ 發送失敗',true)}
+async function sendAlert(type){const price=document.getElementById('currentPrice').value||'—';const res=await fetch('/webhook',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,price})});const data=await res.json();if(data.ok){showToast('✅ 提醒已推送到 TG！');if(type==='close'){loadStatus();loadSOP();}}else showToast(data.error||'❌ 先設定單子再推送',true)}
+async function clearTrade(){await fetch('/clear_trade',{method:'POST'});showToast('🗑 單子已清除');loadStatus();updateSOPUI(0)}
+async function loadStatus(){const res=await fetch('/trade');const t=await res.json();const el=document.getElementById('statusContent');if(!t.entry){el.innerHTML='<div class="status-empty">尚未設定單子</div>';return}const dirColor=t.direction==='long'?'green':'red';const dirText=t.direction==='long'?'▲ 多單 LONG':'▼ 空單 SHORT';el.innerHTML='<div class="trade-row"><span class="trade-label">方向</span><span class="trade-val '+dirColor+'">'+dirText+'</span></div><div class="trade-row"><span class="trade-label">進場價</span><span class="trade-val">'+t.entry+'</span></div><div class="trade-row"><span class="trade-label">停損</span><span class="trade-val red">'+t.sl+'</span></div><div class="trade-row"><span class="trade-label">TP1</span><span class="trade-val green">'+t.tp1+'</span></div><div class="trade-row"><span class="trade-label">TP2</span><span class="trade-val purple">'+t.tp2+'</span></div>'}
+function showToast(msg,isError=false){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(isError?' error':'');setTimeout(()=>{t.className='toast'},3000)}
 </script>
 </body>
 </html>"""
 
-
-@app.route("/")
+@app.route("/", methods=["GET"])
 def index():
     return HTML
 
-@app.route("/trade", methods=["POST"])
-def trade():
-    global current_trade
-    data = request.get_json(force=True)
-    current_trade = data
-    send_telegram(msg_entry(data))
-    return jsonify({"ok": True})
+@app.route("/set_trade", methods=["POST"])
+def set_trade():
+    global current_trade, sop_status
+    data = request.json
+    current_trade = {
+        "direction": data.get("direction", "long"),
+        "entry": data.get("entry", ""),
+        "sl": data.get("sl", ""),
+        "tp1": data.get("tp1", ""),
+        "tp2": data.get("tp2", ""),
+        "range": data.get("range", ""),
+    }
+    sop_status = {"step": 0}
+    send_telegram(msg_entry(current_trade))
+    return jsonify({"ok": True, "trade": current_trade})
 
-@app.route("/sop", methods=["POST"])
-def sop():
-    data = request.get_json(force=True)
-    t = current_trade
-    type_ = data.get("type")
-    if type_ == "consolidating":     msg = msg_consolidating(t)
-    elif type_ == "breakout":        msg = msg_breakout(t)
-    elif type_ == "retest":          msg = msg_retest(t)
-    elif type_ == "entry_confirmed": msg = msg_entry_confirmed(t)
-    elif type_ == "retest_fail":     msg = msg_retest_fail(t)
-    elif type_ == "wait_breakout":   msg = msg_wait_breakout(t)
-    elif type_ == "watch_m5":        msg = msg_watch_m5(t)
-    else: return jsonify({"ok": False}), 400
-    send_telegram(msg)
-    return jsonify({"ok": True})
-
-@app.route("/quick", methods=["POST"])
-def quick():
-    data = request.get_json(force=True)
-    type_ = data.get("type")
-    price = data.get("price", "—")
-    t = current_trade if current_trade else {}
-
-    if type_ == "tp1":
-        msg = msg_tp1(t) if t else "✅ <b>XAU/USD TP1 達到！</b>\n━━━━━━━━━━━━━━━\n⚡ 動作：執行讓利出場"
-    elif type_ == "profit":
-        msg = msg_profit(t, price) if t else "💰 <b>XAU/USD 讓利提醒</b>\n━━━━━━━━━━━━━━━\n建議出場｜一半倉位先走"
-    elif type_ == "sl_warning":
-        msg = msg_sl_warning(t, price) if t else "🚨 <b>XAU/USD 停損警告！</b>\n━━━━━━━━━━━━━━━\n⚠️ 價格接近停損！請確認部位\n❌ 若觸及停損：立即出場勿凹單"
-    elif type_ == "close":
-        msg = msg_close(t) if t else "🏁 <b>XAU/USD 本波結束</b>\n━━━━━━━━━━━━━━━\n📌 等新區間形成再規劃下一波\n🔄 停手觀察，勿追行情"
-    else:
-        return jsonify({"ok": False}), 400
-    send_telegram(msg)
-    return jsonify({"ok": True})
-
-@app.route("/result", methods=["POST"])
-def result():
-    data = request.get_json(force=True)
-    msg = msg_result(data)
-    ok = send_telegram(msg)
-    return jsonify({"ok": ok}), 200 if ok else 500
-
-@app.route("/current", methods=["GET"])
-def current():
+@app.route("/trade", methods=["GET"])
+def get_trade():
     return jsonify(current_trade)
 
-@app.route("/clear", methods=["POST"])
-def clear():
-    global current_trade
+@app.route("/sop", methods=["GET"])
+def get_sop():
+    return jsonify(sop_status)
+
+@app.route("/clear_trade", methods=["POST"])
+def clear_trade():
+    global current_trade, sop_status
     current_trade = {}
+    sop_status = {"step": 0}
     return jsonify({"ok": True})
 
-@app.route("/stats", methods=["GET"])
-def stats():
-    reset_if_new_day()
-    return jsonify(daily_stats)
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    global current_trade, sop_status
+    data = request.json
+    alert_type = data.get("type", "")
+    price = data.get("price", "N/A")
+
+    if alert_type == "consolidating":
+        if current_trade:
+            message = msg_consolidating(current_trade)
+        else:
+            message = ("⏳ <b>XAU/USD 15分區間整理中</b>\n"
+                      f"━━━━━━━━━━━━━━━\n"
+                      f"📌 等待突破訊號，尚未進場\n"
+                      f"🔍 持續觀察區間形成")
+        send_telegram(message)
+        return jsonify({"ok": True})
+
+    if alert_type == "breakout":
+        sop_status["step"] = 1
+        if current_trade:
+            message = msg_breakout(current_trade)
+        else:
+            message = ("⚡ <b>XAU/USD 突破訊號！</b>\n"
+                      f"━━━━━━━━━━━━━━━\n"
+                      f"📌 等待回測確認，準備進場")
+        send_telegram(message)
+        return jsonify({"ok": True})
+
+    if alert_type == "retest":
+        sop_status["step"] = 2
+        if current_trade:
+            message = msg_retest(current_trade)
+        else:
+            message = ("🔄 <b>XAU/USD 回測確認！</b>\n"
+                      f"━━━━━━━━━━━━━━━\n"
+                      f"⚡ 等待第三根K棒確認進場")
+        send_telegram(message)
+        return jsonify({"ok": True})
+
+    if alert_type == "entry_confirmed":
+        sop_status["step"] = 3
+        if current_trade:
+            message = msg_entry_confirmed(current_trade)
+        else:
+            message = ("🎯 <b>XAU/USD 第三根進場！</b>\n"
+                      f"━━━━━━━━━━━━━━━\n"
+                      f"⚡ 進場執行中")
+        send_telegram(message)
+        return jsonify({"ok": True})
+
+    if not current_trade:
+        return jsonify({"ok": False, "error": "尚未設定當前單子"})
+
+    if alert_type == "tp1":
+        message = msg_tp1(current_trade)
+    elif alert_type == "profit":
+        message = msg_profit(current_trade, price)
+    elif alert_type == "sl_warning":
+        message = msg_sl_warning(current_trade, price)
+    elif alert_type == "close":
+        message = msg_close(current_trade)
+        current_trade = {}
+        sop_status = {"step": 0}
+    else:
+        message = f"📊 XAU/USD 警報：{data.get('message', alert_type)}"
+
+    success = send_telegram(message)
+    return jsonify({"ok": success})
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok"}), 200
+    return jsonify({"status": "running", "has_trade": bool(current_trade), "sop_step": sop_status.get("step", 0)})
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
